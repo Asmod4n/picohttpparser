@@ -520,6 +520,7 @@ int phr_parse_headers(const char *buf_start, size_t len, struct phr_header *head
 
 enum {
     CHUNKED_IN_CHUNK_SIZE,
+    CHUNKED_IN_CHUNK_SIZE_BWS,
     CHUNKED_IN_CHUNK_EXT,
     CHUNKED_IN_CHUNK_HEADER_EXPECT_LF,
     CHUNKED_IN_CHUNK_DATA,
@@ -561,13 +562,17 @@ ssize_t phr_decode_chunked(struct phr_chunked_decoder *decoder, char *buf, size_
                         ret = -1;
                         goto Exit;
                     }
+                    decoder->_hex_count = 0;
                     /* the only characters that may appear after the chunk size are BWS, semicolon, or CRLF */
                     switch (buf[src]) {
                     case ' ':
                     case '\011':
+                        decoder->_state = CHUNKED_IN_CHUNK_SIZE_BWS;
+                        break;
                     case ';':
                     case '\012':
                     case '\015':
+                        decoder->_state = CHUNKED_IN_CHUNK_EXT;
                         break;
                     default:
                         ret = -1;
@@ -582,7 +587,20 @@ ssize_t phr_decode_chunked(struct phr_chunked_decoder *decoder, char *buf, size_
                 decoder->bytes_left_in_chunk = decoder->bytes_left_in_chunk * 16 + v;
                 ++decoder->_hex_count;
             }
-            decoder->_hex_count = 0;
+            break;
+        case CHUNKED_IN_CHUNK_SIZE_BWS:
+            /* RFC 9112 7.1.1 "chunk-ext = *( BWS ";" BWS chunk-ext-name ... )": BWS belongs to a chunk extension, therefore a
+             * semicolon has to follow it */
+            for (;; ++src) {
+                if (src == bufsz)
+                    goto Exit;
+                if (!(buf[src] == ' ' || buf[src] == '\011'))
+                    break;
+            }
+            if (buf[src] != ';') {
+                ret = -1;
+                goto Exit;
+            }
             decoder->_state = CHUNKED_IN_CHUNK_EXT;
         /* fallthru */
         case CHUNKED_IN_CHUNK_EXT:
