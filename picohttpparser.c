@@ -52,6 +52,15 @@
 
 #define IS_PRINTABLE_ASCII(c) ((unsigned char)(c)-040u < 0137u)
 
+/* RFC 9112 2.2 lets a recipient take a single LF as a line terminator. Define PHR_STRICT_CRLF to withdraw that permission for the
+ * start-line and the field lines and demand CRLF, as this parser already does for a chunk header. The trailer lines that
+ * phr_decode_chunked throws away are not covered; a caller that keeps its trailers reads them with phr_parse_headers, which is. */
+#ifdef PHR_STRICT_CRLF
+#define ACCEPT_BARE_LF 0
+#else
+#define ACCEPT_BARE_LF 1
+#endif
+
 #define CHECK_EOF()                                                                                                                \
     if (buf == buf_end) {                                                                                                          \
         *ret = -2;                                                                                                                 \
@@ -182,7 +191,7 @@ FOUND_CTL:
         ++buf;
         EXPECT_CHAR('\012');
         *token_len = buf - 2 - token_start;
-    } else if (*buf == '\012') {
+    } else if (ACCEPT_BARE_LF && *buf == '\012') {
         *token_len = buf - token_start;
         ++buf;
     } else {
@@ -304,7 +313,7 @@ static const char *parse_headers(const char *buf, const char *buf_end, struct ph
             ++buf;
             EXPECT_CHAR('\012');
             break;
-        } else if (*buf == '\012') {
+        } else if (ACCEPT_BARE_LF && *buf == '\012') {
             ++buf;
             break;
         }
@@ -361,7 +370,7 @@ static const char *parse_request(const char *buf, const char *buf_end, const cha
     if (*buf == '\015') {
         ++buf;
         EXPECT_CHAR('\012');
-    } else if (*buf == '\012') {
+    } else if (ACCEPT_BARE_LF && *buf == '\012') {
         ++buf;
     }
 
@@ -388,7 +397,7 @@ static const char *parse_request(const char *buf, const char *buf_end, const cha
     if (*buf == '\015') {
         ++buf;
         EXPECT_CHAR('\012');
-    } else if (*buf == '\012') {
+    } else if (ACCEPT_BARE_LF && *buf == '\012') {
         ++buf;
     } else {
         *ret = -1;

@@ -231,8 +231,12 @@ static void test_response(void)
     ok(msg == NULL);
     PARSE("HTTP/1.1 200 OK\r\n", 0, -2, "incomplete 10");
     ok(bufis(msg, msg_len, "OK"));
+#ifdef PHR_STRICT_CRLF
+    PARSE("HTTP/1.1 200 OK\n", 0, -1, "bare lf behind the status line");
+#else
     PARSE("HTTP/1.1 200 OK\n", 0, -2, "incomplete 11");
     ok(bufis(msg, msg_len, "OK"));
+#endif
 
     PARSE("HTTP/1.1 200 OK\r\nA: 1\r", 0, -2, "incomplete 11");
     ok(num_headers == 0);
@@ -532,6 +536,41 @@ static void test_chunked_overhead(void)
     ok(do_test_chunked_overhead(10, 100000, "; large=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") == -1);
 }
 
+/* RFC 9112 2.2 lets a recipient take a bare LF as a line terminator, and PHR_STRICT_CRLF withdraws that. Two recipients that
+ * disagree about it read one byte stream as two different messages, which is the request smuggling shape Kettle reported in 2019. */
+static void test_bare_lf(void)
+{
+    const char *method;
+    size_t method_len;
+    const char *path;
+    size_t path_len;
+    int minor_version;
+    struct phr_header headers[4];
+    size_t num_headers;
+#ifdef PHR_STRICT_CRLF
+    const int refused = 1;
+#else
+    const int refused = 0;
+#endif
+
+#define PARSE_CRLF(s, comment)                                                                                                     \
+    do {                                                                                                                           \
+        size_t slen = sizeof(s) - 1;                                                                                               \
+        note(comment);                                                                                                             \
+        num_headers = sizeof(headers) / sizeof(headers[0]);                                                                        \
+        memcpy(inputbuf - slen, s, slen);                                                                                          \
+        ok(phr_parse_request(inputbuf - slen, slen, &method, &method_len, &path, &path_len, &minor_version, headers,               \
+                             &num_headers, 0) == (refused ? -1 : (int)slen));                                                      \
+    } while (0)
+
+    PARSE_CRLF("GET / HTTP/1.0\nHost: a\r\n\r\n", "bare lf behind the request line");
+    PARSE_CRLF("GET / HTTP/1.0\r\nHost: a\n\r\n", "bare lf behind a field line");
+    PARSE_CRLF("GET / HTTP/1.0\r\nHost: a\r\n\n", "bare lf as the empty line");
+    PARSE_CRLF("\nGET / HTTP/1.0\r\n\r\n", "bare lf as the empty line in front of the request");
+
+#undef PARSE_CRLF
+}
+
 int main(void)
 {
     long pagesize = sysconf(_SC_PAGESIZE);
@@ -543,6 +582,7 @@ int main(void)
     ok(mprotect(inputbuf - pagesize, pagesize, PROT_READ | PROT_WRITE) == 0);
 
     subtest("request", test_request);
+    subtest("bare-lf", test_bare_lf);
     subtest("response", test_response);
     subtest("headers", test_headers);
     subtest("chunked", test_chunked);
