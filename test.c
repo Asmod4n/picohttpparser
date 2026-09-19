@@ -414,6 +414,7 @@ static void test_chunked(void)
         chunked_test_runners[i](__LINE__, 0, "6\t;\tcomment\r\nhello \r\n5\r\nworld\r\n0\r\n", "hello world", 0);
         chunked_test_runners[i](__LINE__, 0, "6  ;  comment\r\nhello \r\n5\r\nworld\r\n0\r\n", "hello world", 0);
         chunked_test_runners[i](__LINE__, 0, "6\r\nhello \r\n5\r\nworld\r\n0 ; comment\r\n", "hello world", 0);
+        chunked_test_runners[i](__LINE__, 0, "6;a=\"b c\"\r\nhello \r\n5\r\nworld\r\n0\r\n", "hello world", 0);
         chunked_test_runners[i](__LINE__, 0, "6\r\nhello \r\n5\r\nworld\r\n0\r\na: b\r\nc: d\r\n\r\n", "hello world",
                                 sizeof("a: b\r\nc: d\r\n\r\n") - 1);
         chunked_test_runners[i](__LINE__, 0, "b\r\nhello world\r\n0\r\n", "hello world", 0);
@@ -441,6 +442,12 @@ static void test_chunked(void)
     test_chunked_failure(__LINE__, "6 \t \r\nhello \r\n5\r\nworld\r\n0\r\n", -1);
     test_chunked_failure(__LINE__, "6\r\nhello \r\n5\r\nworld\r\n0 \r\n", -1);
     test_chunked_failure(__LINE__, "6 x\r\nhello \r\n5\r\nworld\r\n0\r\n", -1);
+
+    /* chunk-ext-name and chunk-ext-val carry no control character (RFC 9112 7.1.1) */
+    test_chunked_failure(__LINE__, "6;a\013b\r\nhello \r\n5\r\nworld\r\n0\r\n", -1);
+    test_chunked_failure(__LINE__, "6;a\014b\r\nhello \r\n5\r\nworld\r\n0\r\n", -1);
+    test_chunked_failure(__LINE__, "6;a\177b\r\nhello \r\n5\r\nworld\r\n0\r\n", -1);
+    test_chunked_failure(__LINE__, "6;a=\"\013\"\r\nhello \r\n5\r\nworld\r\n0\r\n", -1);
 }
 
 static void test_chunked_consume_trailer(void)

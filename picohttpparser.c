@@ -604,13 +604,15 @@ ssize_t phr_decode_chunked(struct phr_chunked_decoder *decoder, char *buf, size_
             decoder->_state = CHUNKED_IN_CHUNK_EXT;
         /* fallthru */
         case CHUNKED_IN_CHUNK_EXT:
-            /* RFC 7230 A.2 "Line folding in chunk extensions is disallowed" */
+            /* RFC 9112 7.1.1 "chunk-ext-name = token" and "chunk-ext-val = token / quoted-string": none of the three carries a
+             * control character. Rejecting them also rejects the bare LF, which RFC 7230 A.2 already ruled out ("Line folding in
+             * chunk extensions is disallowed"). */
             for (;; ++src) {
                 if (src == bufsz)
                     goto Exit;
-                if (buf[src] == '\015') {
+                if (buf[src] == '\015')
                     break;
-                } else if (buf[src] == '\012') {
+                if (((unsigned char)buf[src] < '\040' && buf[src] != '\011') || buf[src] == '\177') {
                     ret = -1;
                     goto Exit;
                 }
