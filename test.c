@@ -571,6 +571,53 @@ static void test_bare_lf(void)
 #undef PARSE_CRLF
 }
 
+static void test_field_validity(void)
+{
+    /* RFC 9110 5.1: field-name = token = 1*tchar. The two that pcmpestri
+     * cannot reach with eight ranges, `|` and `~`, are tchar all the same. */
+    ok(phr_is_field_name("host", 4));
+    ok(phr_is_field_name("content-type", 12));
+    ok(phr_is_field_name("sec-ch-ua-platform", 18));
+    ok(phr_is_field_name("a|b~c", 5));
+    ok(phr_is_field_name("Content-Type", 12));
+    ok(!phr_is_field_name("", 0));
+    ok(!phr_is_field_name("a b", 3));
+    ok(!phr_is_field_name(":path", 5));
+    ok(!phr_is_field_name("x:y", 3));
+    ok(!phr_is_field_name("a\177", 2));
+    ok(!phr_is_field_name("a\303", 2));
+    /* over sixteen bytes, so pcmpestri runs before the map does */
+    ok(phr_is_field_name("abcdefghijklmnopqrstuvwxyz", 26));
+    ok(!phr_is_field_name("abcdefghijklmnopqrst uvwxyz", 27));
+
+    /* RFC 9113 8.2.1 and RFC 9114 4.2: the same name, without uppercase. */
+    ok(phr_is_lowercase_field_name("content-type", 12));
+    ok(!phr_is_lowercase_field_name("Content-Type", 12));
+    ok(!phr_is_lowercase_field_name("contenT", 7));
+    ok(!phr_is_lowercase_field_name("", 0));
+    ok(phr_is_lowercase_field_name("x-1_2.3", 7));
+
+    /* RFC 9110 5.5: VCHAR, obs-text, SP and HTAB, and no SP or HTAB at
+     * either end. An empty value is a value. */
+    ok(phr_is_field_value("", 0));
+    ok(phr_is_field_value("text/html", 9));
+    ok(phr_is_field_value("text/html; charset=utf-8", 24));
+    ok(phr_is_field_value("a\tb", 3));
+    ok(phr_is_field_value("\303\244", 2));
+    ok(phr_is_field_value("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36", 50));
+    ok(!phr_is_field_value(" x", 2));
+    ok(!phr_is_field_value("x ", 2));
+    ok(!phr_is_field_value("\tx", 2));
+    ok(!phr_is_field_value("x\t", 2));
+    ok(!phr_is_field_value("a\0b", 3));
+    ok(!phr_is_field_value("a\nb", 3));
+    ok(!phr_is_field_value("a\rb", 3));
+    ok(!phr_is_field_value("a\177b", 3));
+    /* the refused byte past the first sixteen, where pcmpestri finds it */
+    ok(!phr_is_field_value("0123456789abcdef\r", 17));
+    ok(phr_is_field_value("0123456789abcdefg", 17));
+}
+
 int main(void)
 {
     long pagesize = sysconf(_SC_PAGESIZE);
@@ -589,6 +636,7 @@ int main(void)
     subtest("chunked-consume-trailer", test_chunked_consume_trailer);
     subtest("chunked-leftdata", test_chunked_leftdata);
     subtest("chunked-overhead", test_chunked_overhead);
+    subtest("field-validity", test_field_validity);
 
     munmap(inputbuf - pagesize * 2, pagesize * 3);
 

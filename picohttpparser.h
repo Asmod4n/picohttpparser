@@ -53,6 +53,27 @@ struct phr_header {
     size_t value_len;
 };
 
+/* Says whether these bytes are a field name, which RFC 9110 5.1 defines as a
+ * token: one or more tchar, and nothing else. An empty name is not one.
+ */
+int phr_is_field_name(const char *name, size_t len);
+
+/* The same, and with no uppercase letter. RFC 9113 8.2.1 and RFC 9114 4.2
+ * demand that of every field name carried over HTTP/2 and HTTP/3. 9113 states
+ * the rule as three refused ranges - 0x00-0x20, 0x41-0x5a and 0x7f-0xff - and
+ * tchar already refuses the first and the third, so the letters are what is
+ * left.
+ */
+int phr_is_lowercase_field_name(const char *name, size_t len);
+
+/* Says whether these bytes are a field value. RFC 9110 5.5 allows VCHAR,
+ * obs-text, SP and HTAB, and lets neither SP nor HTAB stand first or last. An
+ * empty value is one. This is the check RFC 9113 8.2.1 asks of an HTTP/2
+ * recipient, whose own words are no NUL, no LF, no CR at any position and no
+ * whitespace at either end.
+ */
+int phr_is_field_value(const char *value, size_t len);
+
 /* returns number of bytes consumed if successful, -2 if request is partial,
  * -1 if failed */
 int phr_parse_request(const char *buf, size_t len, const char **method, size_t *method_len, const char **path, size_t *path_len,

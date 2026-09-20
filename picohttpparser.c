@@ -506,6 +506,69 @@ int phr_parse_response(const char *buf_start, size_t len, int *minor_version, in
     return (int)(buf - buf_start);
 }
 
+int phr_is_field_name(const char *name, size_t len)
+{
+    /* The ranges parse_token uses, for the reason it uses them: they are the
+     * bytes that end a token, and `|` and `~` are among them only because
+     * eight ranges is all pcmpestri takes. The map decides. */
+    static const char ALIGNED(16) ranges[] = "\x00 "  /* control chars and up to SP */
+                                             "\"\""   /* 0x22 */
+                                             "()"     /* 0x28,0x29 */
+                                             ",,"     /* 0x2c */
+                                             "//"     /* 0x2f */
+                                             ":@"     /* 0x3a-0x40 */
+                                             "[]"     /* 0x5b-0x5d */
+                                             "{\xff"; /* 0x7b-0xff */
+    const char *buf = name;
+    const char *const buf_end = name + len;
+    int found;
+
+    if (len == 0)
+        return 0;
+    buf = findchar_fast(buf, buf_end, ranges, sizeof(ranges) - 1, &found);
+    for (; buf != buf_end; ++buf)
+        if (!token_char_map[(unsigned char)*buf])
+            return 0;
+    return 1;
+}
+
+int phr_is_lowercase_field_name(const char *name, size_t len)
+{
+    const char *buf = name;
+    const char *const buf_end = name + len;
+
+    if (!phr_is_field_name(name, len))
+        return 0;
+    for (; buf != buf_end; ++buf)
+        if ('A' <= *buf && *buf <= 'Z')
+            return 0;
+    return 1;
+}
+
+int phr_is_field_value(const char *value, size_t len)
+{
+    /* The ranges get_token_to_eol uses: the control characters no field value
+     * may carry, with HTAB and the high half left out of them. */
+    static const char ALIGNED(16) ranges[16] = "\0\010"    /* allow HT */
+                                               "\012\037"  /* allow SP and up to but not including DEL */
+                                               "\177\177"; /* allow chars w. MSB set */
+    const char *buf = value;
+    const char *const buf_end = value + len;
+    int found;
+
+    if (len == 0)
+        return 1;
+    if (value[0] == ' ' || value[0] == '\t' || value[len - 1] == ' ' || value[len - 1] == '\t')
+        return 0;
+    buf = findchar_fast(buf, buf_end, ranges, 6, &found);
+    if (found)
+        return 0;
+    for (; buf != buf_end; ++buf)
+        if (!IS_PRINTABLE_ASCII(*buf) && *buf != '\011' && (unsigned char)*buf < 0x80)
+            return 0;
+    return 1;
+}
+
 int phr_parse_headers(const char *buf_start, size_t len, struct phr_header *headers, size_t *num_headers, size_t last_len)
 {
     const char *buf = buf_start, *buf_end = buf + len;
