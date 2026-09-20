@@ -52,14 +52,11 @@
 
 #define IS_PRINTABLE_ASCII(c) ((unsigned char)(c)-040u < 0137u)
 
-/* RFC 9112 2.2 lets a recipient take a single LF as a line terminator. Define PHR_STRICT_CRLF to withdraw that permission for the
- * start-line and the field lines and demand CRLF, as this parser already does for a chunk header. The trailer lines that
- * phr_decode_chunked throws away are not covered; a caller that keeps its trailers reads them with phr_parse_headers, which is. */
-#ifdef PHR_STRICT_CRLF
-#define ACCEPT_BARE_LF 0
-#else
-#define ACCEPT_BARE_LF 1
-#endif
+/* RFC 9112 2.2 lets a recipient take a single LF as a line terminator. This parser does not: a start-line and a field line end
+ * with CRLF, as a chunk header already had to. Two recipients that disagree about a bare LF read one byte stream as two different
+ * messages, which is the request smuggling shape Kettle reported in 2019, and a permission that has to be switched on is one that
+ * somebody's build leaves off. The trailer lines that phr_decode_chunked throws away are not covered; a caller that keeps its
+ * trailers reads them with phr_parse_headers, which is. */
 
 #define CHECK_EOF()                                                                                                                \
     if (buf == buf_end) {                                                                                                          \
@@ -191,9 +188,6 @@ FOUND_CTL:
         ++buf;
         EXPECT_CHAR('\012');
         *token_len = buf - 2 - token_start;
-    } else if (ACCEPT_BARE_LF && *buf == '\012') {
-        *token_len = buf - token_start;
-        ++buf;
     } else {
         *ret = -1;
         return NULL;
@@ -313,9 +307,6 @@ static const char *parse_headers(const char *buf, const char *buf_end, struct ph
             ++buf;
             EXPECT_CHAR('\012');
             break;
-        } else if (ACCEPT_BARE_LF && *buf == '\012') {
-            ++buf;
-            break;
         }
         if (*num_headers == max_headers) {
             *ret = -1;
@@ -370,8 +361,6 @@ static const char *parse_request(const char *buf, const char *buf_end, const cha
     if (*buf == '\015') {
         ++buf;
         EXPECT_CHAR('\012');
-    } else if (ACCEPT_BARE_LF && *buf == '\012') {
-        ++buf;
     }
 
     /* parse request line */
@@ -397,8 +386,6 @@ static const char *parse_request(const char *buf, const char *buf_end, const cha
     if (*buf == '\015') {
         ++buf;
         EXPECT_CHAR('\012');
-    } else if (ACCEPT_BARE_LF && *buf == '\012') {
-        ++buf;
     } else {
         *ret = -1;
         return NULL;

@@ -30,17 +30,13 @@ TEST_ENV="UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1"
 
 all:
 
-test: test-bin test-bin-strict
+test: test-bin
 	env $(TEST_ENV) $(PROVE) -v ./test-bin
-	env $(TEST_ENV) $(PROVE) -v ./test-bin-strict
 
 test-bin: picohttpparser.c picotest/picotest.c test.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
 
-test-bin-strict: picohttpparser.c picotest/picotest.c test.c
-	$(CC) $(CFLAGS) -DPHR_STRICT_CRLF $(LDFLAGS) -o $@ $^
-
 clean:
-	rm -f test-bin test-bin-strict
+	rm -f test-bin
 
 .PHONY: test
