@@ -534,13 +534,15 @@ int phr_is_field_name(const char *name, size_t len)
 
 int phr_is_lowercase_field_name(const char *name, size_t len)
 {
+    /* One walk, not two: the map and the letters are asked of a byte while
+     * that byte is in hand. */
     const char *buf = name;
     const char *const buf_end = name + len;
 
-    if (!phr_is_field_name(name, len))
+    if (len == 0)
         return 0;
     for (; buf != buf_end; ++buf)
-        if ('A' <= *buf && *buf <= 'Z')
+        if (!token_char_map[(unsigned char)*buf] || ('A' <= *buf && *buf <= 'Z'))
             return 0;
     return 1;
 }
